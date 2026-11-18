@@ -1,6 +1,6 @@
 ---
 name: mind-graph
-description: Read a codebase, a folder of documents (PDF, Word, PowerPoint, Excel, Markdown/Obsidian notes, HTML, EPUB, notebooks), papers, or any mix of them, and turn the understanding into an interactive mind graph (HTML) plus a compact MINDGRAPH.md that later sessions load instead of re-reading everything. Use this whenever someone wants to understand, learn, onboard onto, summarize, map, visualize or get an overview of a repo, project, library, documentation set, course materials, research/paper collection, meeting notes or any folder of files — "explain this project's structure", "help me learn this codebase", "summarize everything in this folder", "draw a mind map / concept map / knowledge graph of these docs", "sơ đồ tư duy", "mind map cho project này", "tóm tắt các tài liệu trong thư mục này" — and whenever a .mindgraph/ folder already exists in the project, even if the user doesn't say "mind graph".
+description: Read a codebase, a folder of documents (PDF, Word, PowerPoint, Excel, Markdown/Obsidian notes, HTML, EPUB, notebooks), papers, or any mix of them, and turn the understanding into an interactive mind graph (HTML) plus a compact MINDGRAPH.md that later sessions load instead of re-reading everything. Use this whenever someone wants to understand, learn, onboard onto, summarize, map, visualize or get an overview of a repo, project, library, documentation set, course materials, research/paper collection, meeting notes or any folder of files — "explain this project's structure", "help me learn this codebase", "summarize everything in this folder", "draw a mind map / concept map / knowledge graph of these docs", "sơ đồ tư duy", "mind map cho project này", "tóm tắt các tài liệu trong thư mục này" — and to compare how a project's architecture changed between commits, PRs or releases, or to map a paper onto the code that implements it. Also use it whenever a .mindgraph/ folder already exists in the project, even if the user doesn't say "mind graph".
 ---
 
 # Mind Graph
@@ -23,6 +23,10 @@ mind-graph/
 ├── scripts/extract_text.py     # read one document by page / slide / sheet / section (pdf, docx, pptx, …)
 ├── scripts/doc_formats.py      # shared extractors (standard library only; used by the two above)
 ├── scripts/build_mindgraph.py  # validate graph.json → mindgraph.html, MINDGRAPH.md, mindmap.mmd
+├── scripts/evidence.py         # node-level evidence: verify quotes, flag stale / changed nodes
+├── scripts/paper_code.py       # research repos: paper inventory, hyperparameter diff, code candidates
+├── scripts/paper_graph.py      # paper ↔ code table, validation and coverage (used by the build)
+├── scripts/graph_diff.py       # conceptual diff of two graphs (used by build --diff)
 ├── assets/viewer.html          # interactive viewer template (no external dependencies)
 └── references/graph_schema.md  # graph.json format + what makes a good mind graph — read before writing
 ```
@@ -34,9 +38,12 @@ listed (and you can open them with your own file-reading tool if it reads PDFs).
 ## Step 0 — Reuse before you read
 
 If `<project>/.mindgraph/MINDGRAPH.md` exists, read it first. That is the point of this skill.
-Then run the scan with `--since-graph` (below): it lists files changed since the graph was
-built. If nothing relevant changed, answer from the existing graph. If some areas changed,
-update only those branches of `graph.json` and rebuild — don't regenerate the whole thing.
+Then run the scan with `--since-graph` (below). It lists the files changed since the graph was
+built and, for nodes that carry evidence, re-checks each quote against today's files. The
+result is a list of nodes that are **stale** (the quote is gone) or **changed** (the text around
+the quote was edited). Nodes reported ok can be trusted without re-reading. If nothing relevant
+changed, answer from the existing graph. Otherwise re-read only the flagged nodes' sources,
+update those branches of `graph.json` and rebuild. Don't regenerate the whole thing.
 
 ## Step 1 — Scan (cheap, no reading yet)
 
@@ -97,6 +104,37 @@ reading for core documents, samples for the rest; very large (hundreds of docume
 words) → work theme by theme and say which areas are only shallowly mapped. Keep a list of what
 you actually read; it goes into `meta.sources_read` so readers know how deep the map is.
 
+### Research repos: paper ↔ code
+
+When the repo implements one or more papers (the scan prints "Paper + code detected", or the
+user mentions a paper or reproducing results), map the paper onto the code. This is the most
+valuable and the most laborious part of reproducing a paper.
+
+```bash
+python <skill>/scripts/paper_code.py paper.pdf --code <root>            # or main.tex / an arXiv source folder
+```
+
+It writes `.mindgraph/paper_map.json` and prints:
+
+- the paper's inventory: sections, numbered equations, algorithms with their steps, tables, and
+  stated hyperparameters, each with an id (`eq:7`, `alg:1`, `alg:1.4`, `§3.2`, `hp:clip`)
+- a **hyperparameter diff**: each value stated in the paper against same-named settings in
+  code, configs and scripts. A `≠` row is a deviation candidate.
+- code comments that cite the paper ("Eq. (7)", "Algorithm 1")
+- ranked candidate functions for each equation and algorithm
+
+Treat the candidates as leads. Read each one and decide:
+
+- **implements, and how faithfully?** `exact` (same math), `approx` (equivalent up to
+  constants or numerics), `partial` (some steps), or `deviates`.
+- **what differs?** A coefficient or hyperparameter, a missing step, an extra step, a different
+  formula, or a trick that only exists in the code (gradient clipping, normalization, warmup,
+  clamping, epsilon terms). Each difference becomes a deviation node. Be concrete: what the paper
+  says, what the code does, and the likely impact. When the impact is a guess, say so.
+
+An equation that nothing implements stays as a node with `paper_ref` and no `implements` link.
+The table then shows it as ∅ (not in code), which is a finding in itself.
+
 ## Step 3 — Design the graph, then write graph.json
 
 Read `references/graph_schema.md` now — it has the exact format, the quality rules and patterns
@@ -116,6 +154,19 @@ for each kind of project or document collection. The key decisions, briefly:
 - **Learning path**: 5–12 ordered stops through the graph with a one-line "why now".
 - **Only claim what you read.** Every `sources` path must exist; the build checks this. Mark
   inferred or uncertain points in the summary ("likely", "not verified") rather than guessing.
+- **Back key claims with evidence.** On core nodes (`importance: 3`) and on leaves that make a
+  specific claim, add `evidence`: 1–2 short quotes copied verbatim from the source that prove the
+  summary, e.g. a signature, a config line, or a defining sentence (20–200 chars, unique in the
+  file). The build locates each quote and stores a baseline. A quote it can't find is an error,
+  so copy the quote, don't paraphrase it. Later builds and scans then show exactly which nodes no
+  longer hold. Pillars that only group their children usually don't need evidence.
+- **Research repos: two sides joined by `implements`.** Paper-side nodes carry `paper_ref`
+  ("Eq. 7", "Alg. 1 L4", "§3.2", "hp:clip"). Code nodes link to them with
+  `{"type": "implements", "fidelity": …}`. Each paper/code difference is a `question` node with
+  a `deviation` object, linked with `contrasts`. Put these nodes under a "Paper vs code" pillar so
+  a reader checks them first when results don't reproduce. The build turns all this into a
+  Paper ↔ Code table and warns about equations, algorithms and `≠` hyperparameters from
+  paper_map.json that the graph doesn't cover yet.
 - **For a document collection, every relevant document should be reachable** from some node's
   `sources` (or named as skipped in `meta.scope`); the build reports coverage against scan.json.
 
@@ -129,9 +180,10 @@ python <skill>/scripts/build_mindgraph.py <root>/.mindgraph/graph.json
 ```
 
 This validates the graph (unique ids, valid links, source paths that exist, page/slide formats,
-size warnings, document coverage) and writes `mindgraph.html`, `MINDGRAPH.md` and `mindmap.mmd`
-next to it. Fix every error and reconsider the warnings, then rebuild. `--check` validates
-without writing.
+size warnings, document coverage), verifies evidence, and writes `mindgraph.html`, `MINDGRAPH.md`
+and `mindmap.mmd` next to it. Nodes whose evidence is stale or changed get a ⚠ in the viewer and
+in MINDGRAPH.md. Fix every error and reconsider the warnings, then rebuild. `--check` validates
+and verifies without writing anything.
 
 ## Step 5 — Hand it over
 
@@ -139,7 +191,8 @@ without writing.
   Source links open the local files (PDFs at the cited page) as long as the HTML stays in
   `.mindgraph/`; with `meta.repo_url` they open on the code host instead.
 - In chat, keep it short: what the project or collection is in 2–3 sentences, the pillars, and
-  the first 3 stops of the learning path. The graph holds the rest.
+  the first 3 stops of the learning path. The graph holds the rest. For a research repo, also
+  list the deviations that are most likely to affect results.
 - Mention that future sessions can start from `.mindgraph/MINDGRAPH.md`, and offer to add one
   line to the project's `CLAUDE.md` / `AGENTS.md` pointing there (edit it only if they agree —
   it's their file). Suggested line:
@@ -148,7 +201,41 @@ without writing.
 
 ## Updating an existing graph
 
-Run the scan with `--since-graph`, read only changed files, edit the affected nodes and links in
-`graph.json` (keep ids stable so learning paths and links survive), update `meta`, rebuild.
+Run the scan with `--since-graph` and start from its evidence list. For each ⚠ node:
+
+- **stale**: re-read the source and rewrite the node's summary and quote, or remove the node if
+  the thing is gone.
+- **changed**: re-read around the quote. If the node is still right, run the build with
+  `--accept <id>[,<id>…]` to store a new baseline. If it is wrong, edit the node.
+
+Editing a node's summary, details or quote re-verifies it automatically on the next build. A
+plain rebuild never clears a flag. Then read changed files that no node covers, add or edit
+nodes (keep ids stable so learning paths and links survive), update `meta`, and rebuild.
 Outside git, changes are detected by modification time. If the project's shape changed a lot,
 say so and offer a full rebuild instead of patching.
+
+## Comparing two versions (PR review, releases)
+
+```bash
+python <skill>/scripts/build_mindgraph.py --diff OLD NEW [--out-dir DIR]
+python <skill>/scripts/build_mindgraph.py --diff main:.mindgraph/graph.json .mindgraph/graph.json
+```
+
+OLD and NEW are graph.json paths or git objects (`REV:path`, e.g. the graph committed on `main`
+or on a release tag). The command writes two files next to NEW:
+
+- `mindgraph_diff.html`: the viewer with changed branches expanded and unchanged ones
+  collapsed. Added nodes are green (+), removed ones red and struck through, changed ones amber
+  (~, with the previous summary in the node panel), and moved ones blue (↷). Links are coloured
+  the same way, and a Changes tab lists everything.
+- `DIFF.md`: a summary to paste into a PR description. It lists the areas that changed most and
+  the added, removed, changed and moved nodes, plus relationship and learning-path changes.
+
+Nodes are matched by id, so the diff is only meaningful if ids stay stable when you update a
+graph. Nodes whose id changed but whose label didn't are reported as "id renamed".
+
+Use it when the user wants to review a large PR at the concept level, or to see how a library's
+architecture changed between releases. To compare releases, build one graph per release (for
+example, check out each tag and run Steps 1–4, or update the graph incrementally from tag to tag
+so ids stay stable), then diff them. In chat, summarize the "Areas most changed" and the 3–5
+changes that matter most for the user's question.

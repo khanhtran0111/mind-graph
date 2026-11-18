@@ -9,8 +9,17 @@ Reads graph.json (see references/graph_schema.md) and writes, next to it:
 If .mindgraph/scan.json (from scan_project.py) sits next to graph.json, the build also reports
 documents in the scanned folder that no node points to (coverage).
 
+Node evidence (see evidence.py): quotes in `node.evidence` are located in their files. New or
+edited evidence must be found (else error) and gets a baseline; existing evidence is compared with
+its baseline and nodes are marked ok / changed / stale in all outputs.
+
 Usage:
-  python build_mindgraph.py <graph.json> [--check] [--out-dir DIR] [--md-depth 3]
+  python build_mindgraph.py <graph.json> [--check] [--accept IDS|all] [--out-dir DIR] [--md-depth 3]
+    --check    validate and verify evidence, write nothing
+    --accept   re-baseline evidence of these node ids (comma-separated) after re-reading them
+  python build_mindgraph.py --diff OLD NEW [--out-dir DIR]
+    compare two graphs (paths, or git objects like main:.mindgraph/graph.json) and write
+    mindgraph_diff.html (changes highlighted in the viewer) and DIFF.md next to NEW
 Exit code 1 if there are errors (warnings don't fail the build).
 """
 from __future__ import annotations
@@ -24,6 +33,10 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import evidence as evmod  # noqa: E402
+import paper_graph as pgmod  # noqa: E402
+
 TEMPLATE = HERE.parent / "assets" / "viewer.html"
 KINDS = {"root", "concept", "module", "file", "symbol", "doc", "data", "external", "question"}
 LINK_TYPES = {"depends_on", "calls", "data_flow", "explains", "implements", "configures", "contrasts", "related"}
@@ -81,7 +94,12 @@ def validate(g: dict, base: Path):
             if not p or re.match(r"^https?://", p):
                 continue
             if not (root_dir / p).exists():
-                missing_src.append(f"{nid}: {p}")
+                tracked = any(isinstance(e, dict) and e.get("ctx") and e.get("path") == p
+                              for e in node.get("evidence") or [])
+                if tracked:  # verified earlier; evidence check marks the node stale instead of blocking
+                    warnings.append(f"{where}: source {p} is gone; node marked stale — update or remove it")
+                else:
+                    missing_src.append(f"{nid}: {p}")
             if isinstance(s, dict):
                 for k in ("page", "slide"):
                     if k in s and not re.fullmatch(r"\d+(\s*-\s*\d+)?", str(s[k])):
@@ -199,7 +217,7 @@ def locator(s: dict) -> str:
     return ", ".join(bits)
 
 
-def render_md(g: dict, md_depth: int):
+def render_md(g: dict, md_depth: int, paper_table=None):
     meta, root = g["meta"], g["root"]
     ids = {n["id"]: n for n, _, _ in walk(root)}
     L = [f"# Mind graph: {meta.get('title')}", ""]
@@ -208,13 +226,32 @@ def render_md(g: dict, md_depth: int):
              + f" · {meta['stats']['nodes']} nodes. Read this before exploring the project; "
                "open files listed here only when the task needs them. "
                "If files changed since this commit, the map may be stale for those areas.")
+    ev = meta.get("evidence")
+    if ev and ev.get("nodes_with_evidence"):
+        L.append(f"> Evidence ({ev['checked_at'][:10]}): {ev['nodes_with_evidence']} nodes are backed by quotes "
+                 f"checked against their sources — {ev['ok']} ok, {ev['changed']} changed, {ev['stale']} stale. "
+                 "⚠ marks nodes to re-read before trusting; run the build with --check (or scan with "
+                 "--since-graph) for the current state.")
     if meta.get("scope"):
         L.append(f"> Scope: {meta['scope']}")
-    L += ["", f"**{root.get('label')}** — {root.get('summary', '')}", "", "## Map", ""]
+    L += ["", f"**{root.get('label')}** — {root.get('summary', '')}"]
+    flagged = [(n, d) for n, d, _ in walk(root) if n.get("evidence_status") in ("stale", "changed")]
+    if flagged:
+        L += ["", "## Needs re-check", ""]
+        flagged.sort(key=lambda nd: nd[0]["evidence_status"] != "stale")
+        for n, _ in flagged[:25]:
+            bad = [e for e in n.get("evidence") or [] if e.get("status") in ("stale", "changed")]
+            what = "; ".join(f"{e.get('path')}" + (f" {e['at']}" if e.get("at") else "") for e in bad[:3])
+            L.append(f"- ⚠{n['evidence_status']} **{n['label']}** `{n['id']}` — {what}")
+        if len(flagged) > 25:
+            L.append(f"- … {len(flagged) - 25} more (see graph.json `evidence_status`)")
+    L += ["", "## Map", ""]
 
     def emit(node, depth):
         for c in node.get("children") or []:
             star = " ★" if c.get("importance") == 3 else ""
+            if c.get("evidence_status") in ("stale", "changed"):
+                star += f" ⚠{c['evidence_status']}"
             # deeper levels stay terse: one source, short summary (the HTML/graph.json hold the rest)
             src = fmt_src(c, 3 if depth == 1 else 1)
             summ = c.get("summary", "")
@@ -240,6 +277,8 @@ def render_md(g: dict, md_depth: int):
             L.append(f"- {a.get('label', l['from'])} —{l.get('type', 'related')}"
                      + (f" ({l['label']})" if l.get("label") else "")
                      + f"→ {b.get('label', l['to'])}")
+    if paper_table:
+        L += pgmod.md_lines(paper_table)
     lp = g.get("learning_path") or []
     if lp:
         L += ["", "## Learning path", ""]
@@ -274,24 +313,56 @@ def render_mermaid(g: dict, max_depth=4):
     return "\n".join(L) + "\n"
 
 
-def render_html(g: dict):
+def render_html(g: dict, paper_table=None):
     tpl = TEMPLATE.read_text(encoding="utf-8")
     if PLACEHOLDER not in tpl:
         sys.exit(f"template placeholder missing in {TEMPLATE}")
-    data = json.dumps(g, ensure_ascii=False).replace("</", "<\\/").replace("<!--", "<\\!--")
+    payload = dict(g, paper_map=paper_table) if paper_table else g
+    data = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/").replace("<!--", "<\\!--")
     title = re.sub(r"[<>&]", "", g["meta"].get("title", "Mind graph"))
     return tpl.replace(PLACEHOLDER, data).replace("__TITLE__", title)
+
+
+def run_diff(old_spec: str, new_spec: str, out_dir=None):
+    import graph_diff as gd
+    old, old_lab = gd.load(old_spec)
+    new, new_lab = gd.load(new_spec)
+    for name, g in (("OLD", old), ("NEW", new)):
+        if not isinstance(g.get("root"), dict):
+            sys.exit(f"ERROR: {name} has no root node")
+    merged, res, oi, ni = gd.merge(old, new, old_lab, new_lab)
+    out = Path(out_dir) if out_dir else (Path(new_spec).resolve().parent if Path(new_spec).exists() else Path.cwd())
+    out.mkdir(parents=True, exist_ok=True)
+    nodes = list(walk(merged["root"]))
+    merged["meta"]["stats"] = {"nodes": len(nodes), "links": len(merged.get("links") or []),
+                               "depth": max(d for _, d, _ in nodes), "pillars": len(merged["root"].get("children") or [])}
+    (out / "mindgraph_diff.html").write_text(render_html(merged), encoding="utf-8")
+    (out / "DIFF.md").write_text(gd.md(merged, res, oi, ni), encoding="utf-8")
+    c, lc = merged["diff"]["counts"], merged["diff"]["links"]
+    print(f"Diff {old_lab} → {new_lab}: +{c['added']} added · −{c['removed']} removed · ~{c['changed']} changed · "
+          f"↷{c['moved']} moved nodes; links +{lc['added']} −{lc['removed']} ~{lc['changed']}")
+    for name, cc in merged["diff"]["areas"][:5]:
+        print(f"  {name}: " + ", ".join(f"{v} {k}" for k, v in cc.items()))
+    print(f"  → {out / 'mindgraph_diff.html'}, {out / 'DIFF.md'}")
 
 
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("graph")
-    ap.add_argument("--check", action="store_true", help="validate only")
+    ap.add_argument("graph", nargs="?")
+    ap.add_argument("--diff", nargs=2, metavar=("OLD", "NEW"),
+                    help="compare two graphs (path or REV:path) → mindgraph_diff.html + DIFF.md")
+    ap.add_argument("--check", action="store_true", help="validate and verify evidence; write nothing")
+    ap.add_argument("--accept", default="", metavar="IDS",
+                    help="comma-separated node ids (or 'all') whose evidence you re-read: store a new baseline")
     ap.add_argument("--out-dir")
     ap.add_argument("--md-depth", type=int, default=3, help="outline depth in MINDGRAPH.md")
     a = ap.parse_args()
+    if a.diff:
+        return run_diff(a.diff[0], a.diff[1], a.out_dir)
+    if not a.graph:
+        ap.error("give a graph.json, or --diff OLD NEW")
     gp = Path(a.graph)
     try:
         g = json.loads(gp.read_text(encoding="utf-8"))
@@ -299,16 +370,34 @@ def main():
         sys.exit(f"ERROR: graph.json is not valid JSON: {e}")
     base = gp.resolve().parent
     errors, warnings = validate(g, base)
+    paper_table = None
+    if isinstance(g.get("root"), dict):
+        e2, w2 = pgmod.validate(g)
+        errors += e2
+        warnings += w2
+        if not e2:
+            paper_table = pgmod.build_table(g, base)
+            if paper_table:
+                warnings += pgmod.coverage_warnings(paper_table)
     cov = coverage(g, base) if isinstance(g.get("root"), dict) else None
     if cov and cov["missing"]:
         n, m = cov["total"], len(cov["missing"])
         warnings.append(f"coverage: {n - m}/{n} scanned documents are referenced by a node; not referenced: "
                         + ", ".join(cov["missing"][:12]) + (" …" if m > 12 else "")
                         + ". Add them to a node's sources, or name them as skipped in meta.scope.")
+    ev_rep = None
+    if isinstance(g.get("root"), dict):
+        root_dir = (base / (g.get("meta") or {}).get("root_path", "..")).resolve()
+        accept = {x.strip() for x in a.accept.split(",") if x.strip()}
+        ev_rep = evmod.verify_graph(g, root_dir, mutate=not a.check, accept=accept)
+        errors += ev_rep["errors"]
+        warnings += ev_rep["warnings"]
     for w in warnings:
         print("warning:", w)
     for e in errors:
         print("ERROR:", e)
+    if ev_rep and ev_rep["with_evidence"]:
+        print("\n".join(evmod.report_lines(ev_rep)))
     if errors:
         print(f"\n{len(errors)} error(s); nothing written.")
         sys.exit(1)
@@ -319,13 +408,20 @@ def main():
     out = Path(a.out_dir) if a.out_dir else base
     out.mkdir(parents=True, exist_ok=True)
     gp.write_text(json.dumps(g, ensure_ascii=False, indent=1), encoding="utf-8")  # persist filled meta
-    (out / "mindgraph.html").write_text(render_html(g), encoding="utf-8")
-    md = render_md(g, a.md_depth)
+    if paper_table:  # rebuild after evidence statuses were filled in
+        paper_table = pgmod.build_table(g, base)
+    (out / "mindgraph.html").write_text(render_html(g, paper_table), encoding="utf-8")
+    md = render_md(g, a.md_depth, paper_table)
     (out / "MINDGRAPH.md").write_text(md, encoding="utf-8")
     (out / "mindmap.mmd").write_text(render_mermaid(g), encoding="utf-8")
     st = g["meta"]["stats"]
     if cov:
         print(f"Coverage: {cov['total'] - len(cov['missing'])}/{cov['total']} documents from scan.json referenced")
+    if paper_table:
+        c = paper_table["counts"]
+        print(f"Paper ↔ code: {len(paper_table['rows'])} items · {c['exact']} exact · {c['approx'] + c['mapped']} approx/mapped · "
+              f"{c['partial']} partial · {c['deviates']} deviate · {c['missing']} not in code · "
+              f"{len(paper_table['extras'])} code-only · {len(paper_table['unmapped'])} unmapped")
     print(f"Built {st['nodes']} nodes, {st['links']} links, depth {st['depth']} → {out}/")
     est = max(len(md) // 4, len(md.encode("utf-8")) * 10 // 36)  # rough; non-Latin scripts cost more
     print(f"  mindgraph.html, MINDGRAPH.md (~{est} tokens, rough), mindmap.mmd")

@@ -7,7 +7,7 @@
 <style>
 :root {
   --bg: #f6f5f1; --panel: #ffffff; --ink: #1c1c1f; --ink-2: #55555c; --ink-3: #8b8b92;
-  --line: #e2e0d8; --chip: #efede6; --accent: #2b67d8; --link: #9d998e; --match: #d99a00;
+  --line: #e2e0d8; --chip: #efede6; --accent: #2b67d8; --link: #9d998e; --match: #d99a00; --stale: #d1453b; --add: #1f9d55;
   --n-sat: 70%; --n-fill: 97.5%; --n-stroke: 50%; --p-fill: 90%; --p-text: 23%; --e-l: 56%;
   --shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.06);
   color-scheme: light;
@@ -15,7 +15,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #131417; --panel: #1b1c20; --ink: #ececef; --ink-2: #a6a6ad; --ink-3: #74747b;
-    --line: #2c2d33; --chip: #26272c; --accent: #79a6ff; --link: #6a6b72; --match: #f0b429;
+    --line: #2c2d33; --chip: #26272c; --accent: #79a6ff; --link: #6a6b72; --match: #f0b429; --stale: #ff6b61; --add: #5fd38d;
     --n-sat: 20%; --n-fill: 16%; --n-stroke: 58%; --p-fill: 25%; --p-text: 88%; --e-l: 48%;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
     color-scheme: dark;
@@ -23,7 +23,7 @@
 }
 :root[data-theme="dark"] {
   --bg: #131417; --panel: #1b1c20; --ink: #ececef; --ink-2: #a6a6ad; --ink-3: #74747b;
-  --line: #2c2d33; --chip: #26272c; --accent: #79a6ff; --link: #6a6b72; --match: #f0b429;
+  --line: #2c2d33; --chip: #26272c; --accent: #79a6ff; --link: #6a6b72; --match: #f0b429; --stale: #ff6b61; --add: #5fd38d;
   --n-sat: 20%; --n-fill: 16%; --n-stroke: 58%; --p-fill: 25%; --p-text: 88%; --e-l: 48%;
   --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
   color-scheme: dark;
@@ -81,6 +81,52 @@ svg#canvas.dragging { cursor: grabbing; }
 .node.sel rect.box { stroke: var(--accent); stroke-width: 2.6; }
 .node.match rect.box { stroke: var(--match); stroke-width: 2.6; }
 .node.on-path rect.box { stroke-width: 1.8; }
+.flag { stroke: var(--panel); stroke-width: 1.6; }
+.flag.f1 { fill: var(--match); } .flag.f2 { fill: var(--stale); }
+.subflag { fill: none; stroke-width: 1.8; } .subflag.f1 { stroke: var(--match); } .subflag.f2 { stroke: var(--stale); }
+.chip.ev-ok { background: none; border: 1px solid var(--line); }
+.chip.ev-changed { background: var(--match); color: #1c1c1f; } .chip.ev-stale { background: var(--stale); color: #fff; }
+.ev { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; font-size: 12.5px; }
+.ev.changed { border-left-color: var(--match); } .ev.stale { border-left-color: var(--stale); }
+.ev q { display: block; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink-2); white-space: pre-wrap; quotes: none; }
+.ev .st { color: var(--ink-3); font-size: 11.5px; }
+.evlist button { display: block; border: 0; background: none; padding: 3px 0; cursor: pointer; color: var(--ink); font-size: 12.5px; text-align: left; }
+.evlist button:hover { color: var(--accent); }
+.node.df-added rect.box { stroke: var(--add); stroke-width: 2.2; }
+.node.df-removed { opacity: .62; }
+.node.df-removed rect.box { stroke: var(--stale); stroke-width: 1.8; stroke-dasharray: 4 3; }
+.node.df-removed text.lb { text-decoration: line-through; }
+.node.df-changed rect.box { stroke: var(--match); stroke-width: 2.2; }
+.node.df-moved rect.box { stroke: var(--accent); stroke-width: 2.2; stroke-dasharray: 7 3; }
+.dbadge circle { stroke: var(--panel); stroke-width: 1.5; }
+.dbadge text { fill: #fff; font-size: 12.5px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+.dbadge.added circle { fill: var(--add); } .dbadge.removed circle { fill: var(--stale); }
+.dbadge.changed circle { fill: var(--match); } .dbadge.moved circle { fill: var(--accent); }
+.dsub { fill: none; stroke: var(--match); stroke-width: 1.8; stroke-dasharray: 2 2; }
+.xlink.df-added { stroke: var(--add); opacity: .95; stroke-dasharray: none; stroke-width: 1.6; }
+.xlink.df-removed { stroke: var(--stale); opacity: .6; }
+.xlink.df-changed { stroke: var(--match); opacity: .95; }
+.chip.df-added { background: var(--add); color: #0b0c0f; } .chip.df-removed { background: var(--stale); color: #fff; }
+.chip.df-changed { background: var(--match); color: #1c1c1f; } .chip.df-moved { background: var(--accent); color: #fff; }
+.dchg ul { padding-left: 18px; margin: 4px 0; font-size: 12.5px; }
+.dchg .before { font-size: 12.5px; color: var(--ink-3); border-left: 3px solid var(--line); padding: 2px 0 2px 10px; margin-top: 6px; }
+.dgroup { margin-top: 14px; } .dgroup h3 { display: flex; gap: 6px; align-items: center; }
+.dgroup button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 4px 0; cursor: pointer; color: var(--ink); font-size: 12.5px; }
+.dgroup button:hover { color: var(--accent); } .dgroup button .d { color: var(--ink-3); font-size: 11.5px; }
+.dgroup .lk { font-size: 12px; color: var(--ink-2); padding: 2px 0; }
+.chip.pref { background: none; border: 1px solid var(--accent); color: var(--accent); }
+.devbox { display: grid; grid-template-columns: 64px 1fr; gap: 4px 10px; font-size: 12.5px; margin: 10px 0 4px;
+  padding: 10px 12px; border-radius: 10px; background: var(--chip); }
+.devbox b { color: var(--ink-3); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding-top: 1px; }
+table.pmap { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.pmap td { padding: 6px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+table.pmap td.ref { white-space: nowrap; font-weight: 600; }
+table.pmap td.st { white-space: nowrap; }
+table.pmap a, .pdev a { color: var(--accent); cursor: pointer; text-decoration: none; }
+table.pmap tr.deviates td.st { color: var(--stale); font-weight: 600; }
+table.pmap tr.missing td.st, table.pmap tr.unmapped td { color: var(--ink-3); }
+.pdev { border-left: 3px solid var(--stale); padding: 2px 0 2px 10px; margin: 8px 0; font-size: 12.5px; }
+.pdev .t { color: var(--ink-3); font-size: 11.5px; }
 .tog circle { fill: var(--panel); stroke: hsl(var(--h) 50% var(--n-stroke)); stroke-width: 1.2; }
 .tog text { fill: hsl(var(--h) 55% var(--n-stroke)); font-size: 11px; font-weight: 700; text-anchor: middle; }
 .tog:hover circle { fill: hsl(var(--h) 60% var(--p-fill)); }
@@ -201,12 +247,16 @@ dl.gloss a { color: var(--accent); cursor: pointer; font-size: 12px; }
       <button data-tab="node" class="on">Node</button>
       <button data-tab="path">Learning path</button>
       <button data-tab="gloss" id="tabGloss">Glossary</button>
+      <button data-tab="changes" id="tabChanges" style="display:none">Changes</button>
+      <button data-tab="paper" id="tabPaper" style="display:none">Paper ↔ Code</button>
       <button data-tab="about">About</button>
       <button class="x" id="closePanel" aria-label="Close panel">×</button>
     </div>
     <div class="pane" id="pane-node"></div>
     <div class="pane" id="pane-path" hidden></div>
     <div class="pane" id="pane-gloss" hidden></div>
+    <div class="pane" id="pane-changes" hidden></div>
+    <div class="pane" id="pane-paper" hidden></div>
     <div class="pane" id="pane-about" hidden></div>
   </aside>
 </main>
@@ -241,6 +291,15 @@ dl.gloss a { color: var(--accent); cursor: pointer; font-size: 12px; }
     byId.set(n.id, n); all.push(n);
     n.children.forEach((c, i) => index(c, n, depth + 1, depth === 0 ? i : pi));
   })(root, null, 0, 0);
+  const FLAG = { changed: 1, stale: 2 };
+  all.forEach((n) => { n._flag = FLAG[n.evidence_status] || 0; n._sub = 0; });
+  for (let i = all.length - 1; i >= 0; i--) { const n = all[i], p = n._parent; if (p) p._sub = Math.max(p._sub, n._flag, n._sub); }
+  const DIFF = DATA.diff || null, DSYM = { added: "+", removed: "−", changed: "~", moved: "↷" };
+  if (DIFF) { // open exactly the branches that contain changes
+    all.forEach((n) => { n._dsub = 0; });
+    for (let i = all.length - 1; i >= 0; i--) { const n = all[i], p = n._parent; if (p) p._dsub += n._dsub + (n.diff ? 1 : 0); }
+    all.forEach((n) => { if (n._depth > 0 && n.collapsed == null) n._open = n._dsub > 0; });
+  }
   const pathIndex = new Map(); pathStops.forEach((s, i) => { if (!pathIndex.has(s.node)) pathIndex.set(s.node, i); });
   const outLinks = new Map(), inLinks = new Map();
   links.forEach((l) => {
@@ -312,10 +371,19 @@ dl.gloss a { color: var(--accent); cursor: pointer; font-size: 12px; }
     g.style.setProperty("--h", n._hue);
     const s = n._s;
     el("rect", { class: "box", x: -n._w / 2, y: -n._h / 2, width: n._w, height: n._h, rx: n._depth === 0 ? 12 : n._depth === 1 ? 9 : 7 }, g);
-    if (n._iconW) { const ic = el("text", { class: "ic", x: -n._w / 2 + s.px, y: 0.5 }, g); ic.textContent = ICON[n.kind]; }
+    if (n._iconW) { const ic = el("text", { class: "ic", x: -n._w / 2 + s.px, y: 0.5 }, g); ic.textContent = n.deviation ? "≠" : ICON[n.kind]; }
     const t = el("text", { class: "lb", x: -n._w / 2 + s.px + n._iconW, y: 0.5, "font-size": s.fs, "font-weight": s.fw }, g);
     t.textContent = n._disp;
-    const tt = el("title", {}, g); tt.textContent = n.label + (n.summary ? "\n" + n.summary : "");
+    const tt = el("title", {}, g); tt.textContent = n.label + (n.summary ? "\n" + n.summary : "")
+      + (n._flag ? `\n⚠ evidence ${n.evidence_status}: re-check before trusting` : "");
+    if (n.diff) {
+      g.classList.add("df-" + n.diff);
+      const b = el("g", { class: "dbadge " + n.diff, transform: `translate(${n._w / 2 - 2},${-n._h / 2 + 2})` }, g);
+      el("circle", { r: 8.5 }, b); el("text", { y: 0.5 }, b).textContent = DSYM[n.diff] || "•";
+    }
+    if (DIFF && n._dsub) g._dsub = el("rect", { class: "dsub", x: -n._w / 2 - 4, y: -n._h / 2 - 4, width: n._w + 8, height: n._h + 8, rx: 10 }, g);
+    if (n._flag) el("circle", { class: `flag f${n._flag}`, cx: n._w / 2 - 3, cy: n.diff ? n._h / 2 - 3 : -n._h / 2 + 3, r: 5 }, g);
+    if (n._sub) g._sub = el("circle", { class: `subflag f${n._sub}`, cx: -n._w / 2 + 3, cy: -n._h / 2 + 3, r: 4 }, g);
     if (n.children.length && n._depth > 0) {
       const tg = el("g", { class: "tog" }, g);
       el("circle", { r: 8 }, tg); el("text", { y: 0.5 }, tg);
@@ -332,6 +400,8 @@ dl.gloss a { color: var(--accent); cursor: pointer; font-size: 12px; }
       g._tog.setAttribute("transform", `translate(${n._side * (n._w / 2 + 10)},0)`);
       g._tog.querySelector("text").textContent = n._open ? "−" : String(n.children.length);
     }
+    if (g._sub) g._sub.style.display = n._open ? "none" : "";
+    if (g._dsub) g._dsub.style.display = n._open ? "none" : "";
     g.classList.toggle("sel", n.id === selected);
     g.classList.toggle("match", matches.has(n.id));
     g.classList.toggle("on-path", onPath.has(n.id));
@@ -372,7 +442,7 @@ dl.gloss a { color: var(--accent); cursor: pointer; font-size: 12px; }
       const hot = selected && (l.from === selected || l.to === selected);
       const key = a.id + ">" + b.id + (hot ? "*" + l.type : "");
       if (seen.has(key)) return; seen.add(key);
-      const p = el("path", { class: "xlink" + (hot ? " hot" : selected ? " faded" : ""), "marker-end": `url(#${hot ? "arrHot" : "arr"})` }, gL);
+      const p = el("path", { class: "xlink" + (l.diff ? " df-" + l.diff : "") + (hot ? " hot" : selected ? " faded" : ""), "marker-end": `url(#${hot ? "arrHot" : "arr"})` }, gL);
       let lab = null;
       if (hot) { lab = el("text", { class: "xlabel", "text-anchor": "middle" }, gLab); lab.textContent = (l.label || (l.type || "related").replace("_", " ")); }
       linkEls.push({ a, b, p, lab, proxied: a !== a0 || b !== b0 });
@@ -509,7 +579,7 @@ dl.gloss a { color: var(--accent); cursor: pointer; font-size: 12px; }
   function openPanel(tab) {
     panel.classList.remove("hidden");
     document.querySelectorAll("#tabs button[data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-    ["node", "path", "gloss", "about"].forEach((t) => ($("#pane-" + t).hidden = t !== tab));
+    ["node", "path", "gloss", "changes", "paper", "about"].forEach((t) => ($("#pane-" + t).hidden = t !== tab));
   }
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
@@ -551,9 +621,22 @@ dl.gloss a { color: var(--accent); cursor: pointer; font-size: 12px; }
     const h = [];
     if (anc.length) h.push(`<div class="crumbs">${anc.map((a) => `<a data-go="${esc(a.id)}">${esc(a.label)}</a>`).join(" › ")}</div>`);
     h.push(`<h2>${esc(n.label)}</h2>`);
-    h.push(`<div class="chips"><span class="chip">${esc(ICON[n.kind] ? ICON[n.kind] + " " : "")}${esc(KIND_NAME[n.kind] || n.kind)}</span>${n.importance === 3 ? '<span class="chip core">core</span>' : ""}${(n.tags || []).map((t) => `<span class="chip">#${esc(t)}</span>`).join("")}</div>`);
+    h.push(`<div class="chips"><span class="chip">${esc(ICON[n.kind] ? ICON[n.kind] + " " : "")}${esc(KIND_NAME[n.kind] || n.kind)}</span>${n.importance === 3 ? '<span class="chip core">core</span>' : ""}${[].concat(n.paper_ref || []).map((r) => `<span class="chip pref">📄 ${esc(r)}</span>`).join("")}${n.deviation ? '<span class="chip ev-stale">≠ deviation</span>' : ""}${n.diff ? `<span class="chip df-${esc(n.diff)}">${esc(DSYM[n.diff] + " " + n.diff)}</span>` : ""}${n.evidence_status ? `<span class="chip ev-${esc(n.evidence_status)}">${n.evidence_status === "ok" ? "✓ verified" : "⚠ " + esc(n.evidence_status)}</span>` : ""}${(n.tags || []).map((t) => `<span class="chip">#${esc(t)}</span>`).join("")}</div>`);
     if (n.summary) h.push(`<p class="summary">${inline(n.summary)}</p>`);
+    if (n.diff && n.diff !== "added") {
+      const what = n.diff === "removed" ? `<p class="meta-p">Removed in ${esc((DIFF && DIFF.new.label) || "the new version")}.</p>` : "";
+      h.push(`<div class="sec dchg"><h3>Changes</h3>${what}${(n.diff_detail || []).length ? `<ul>${n.diff_detail.map((x) => `<li>${inline(x)}</li>`).join("")}</ul>` : ""}${n.old_summary != null ? `<div class="before"><b>Before:</b> ${inline(n.old_summary || "—")}</div>` : ""}</div>`);
+    }
+    if (n.deviation) {
+      const d = n.deviation;
+      h.push(`<div class="devbox"><b>Type</b><span>${esc(String(d.type || "other").replace(/_/g, " "))}</span>${d.paper ? `<b>Paper</b><span>${inline(d.paper)}</span>` : ""}${d.code ? `<b>Code</b><span>${inline(d.code)}</span>` : ""}${d.impact ? `<b>Impact</b><span>${inline(d.impact)}</span>` : ""}</div>`);
+    }
     if (n.details) h.push(`<div class="details">${rich(n.details)}</div>`);
+    if ((n.evidence || []).length) {
+      const why = { ok: "found, unchanged", changed: "found, but the text around it changed — re-read", stale: "no longer found in the source" };
+      const loc = (e) => { const at = String(e.at || ""), m = at.match(/^L(\d+(?:-\d+)?)$/), p = at.match(/^page (\d+)/); return { path: e.path, lines: m ? m[1] : undefined, page: p ? p[1] : undefined, section: !m && !p && at ? at : undefined }; };
+      h.push(`<div class="sec"><h3>Evidence</h3>${n.evidence.map((e) => `<div class="ev ${esc(e.status || "")}"><q>${esc(e.quote || "")}</q>${srcHtml(loc(e))}<span class="st">${esc(why[e.status] || "")}${e.verified ? ` · verified ${esc(e.verified)}` : ""}</span></div>`).join("")}</div>`);
+    }
     if ((n.sources || []).length) h.push(`<div class="sec"><h3>Where to look</h3>${n.sources.map(srcHtml).join("")}</div>`);
     if (n.children.length) h.push(`<div class="sec"><h3>Inside (${n.children.length})</h3><div class="kids">${n.children.map((k) => `<button data-go="${esc(k.id)}">${esc(ICON[k.kind] ? ICON[k.kind] + " " : "")}${esc(k.label)}</button>`).join("")}</div></div>`);
     const outs = outLinks.get(n.id) || [], ins = inLinks.get(n.id) || [];
@@ -580,11 +663,51 @@ dl.gloss a { color: var(--accent); cursor: pointer; font-size: 12px; }
   function renderGloss() {
     $("#pane-gloss").innerHTML = '<dl class="gloss">' + glossary.map((t) => `<dt>${esc(t.term)}</dt><dd>${inline(t.definition || "")}${t.node && byId.has(t.node) ? ` <a data-go="${esc(t.node)}">→ ${esc(byId.get(t.node).label)}</a>` : ""}</dd>`).join("") + "</dl>";
   }
+  function renderChanges() {
+    if (!DIFF) return;
+    const c = DIFF.counts || {}, lc = DIFF.links || {};
+    const ver = (v) => [v.label, v.git_commit ? "commit " + v.git_commit : "", v.generated_at ? String(v.generated_at).slice(0, 10) : ""].filter(Boolean).map(esc).join(" · ");
+    const h = [`<h2>Changes</h2><p class="meta-p">${ver(DIFF.old)}<br>→ ${ver(DIFF.new)}</p>`];
+    h.push(`<div class="chips"><span class="chip df-added">+ ${c.added || 0} added</span><span class="chip df-removed">− ${c.removed || 0} removed</span><span class="chip df-changed">~ ${c.changed || 0} changed</span><span class="chip df-moved">↷ ${c.moved || 0} moved</span><span class="chip">links +${lc.added || 0} −${lc.removed || 0} ~${lc.changed || 0}</span></div>`);
+    if ((DIFF.areas || []).length) h.push(`<div class="sec"><h3>Areas most changed</h3>${DIFF.areas.slice(0, 8).map(([name, cc]) => `<div class="lk"><b>${esc(name)}</b> · ${Object.entries(cc).map(([k, v]) => `${DSYM[k]}${v}`).join(" ")}</div>`).join("")}</div>`);
+    const groups = { added: [], removed: [], changed: [], moved: [] };
+    all.forEach((n) => { if (n.diff && groups[n.diff]) groups[n.diff].push(n); });
+    const crumb = (n) => { const a = []; let p = n._parent; while (p && p._depth > 0) { a.unshift(p.label); p = p._parent; } return a.join(" › "); };
+    Object.entries(groups).forEach(([k, ns]) => {
+      if (!ns.length) return;
+      h.push(`<div class="dgroup"><h3><span class="chip df-${k}">${DSYM[k]}</span> ${k} (${ns.length})</h3>${ns.map((n) => `<button data-go="${esc(n.id)}">${esc(n.label)} <span class="d">${esc(crumb(n))}${n.diff_detail && k !== "removed" ? " · " + esc(n.diff_detail.slice(0, 2).join("; ")) : ""}</span></button>`).join("")}</div>`);
+    });
+    const ld = links.filter((l) => l.diff);
+    if (ld.length) {
+      const nm = (id) => esc((byId.get(id) || { label: id }).label);
+      h.push(`<div class="dgroup"><h3>Relationships (${ld.length})</h3>${ld.map((l) => `<div class="lk"><span class="chip df-${esc(l.diff)}">${DSYM[l.diff]}</span> ${nm(l.from)} —${esc(l.type || "related")}→ ${nm(l.to)}${l.diff_detail ? ` <span class="d">(${esc(l.diff_detail.join("; "))})</span>` : ""}</div>`).join("")}</div>`);
+    }
+    $("#pane-changes").innerHTML = h.join("");
+  }
+  function renderPaper() {
+    const pm = DATA.paper_map; if (!pm) return;
+    const c = pm.counts || {}, go = (x) => `<a data-go="${esc(x.id)}">${esc(x.label)}</a>`;
+    const h = [`<h2>Paper ↔ Code</h2><p class="meta-p">${pm.rows.length} paper items · ${c.exact || 0} ✓ exact · ${(c.approx || 0) + (c.mapped || 0)} ≈ approx · ${c.partial || 0} ◐ partial · <b style="color:var(--stale)">${c.deviates || 0} ⚠ deviate</b> · ${c.missing || 0} ∅ not in code${pm.extras.length ? ` · ${pm.extras.length} code-only` : ""}</p>`];
+    h.push('<table class="pmap"><tbody>' + pm.rows.map((r) => `<tr class="${esc(r.status)}"><td class="ref">${esc(r.pretty)}</td><td>${r.nodes.map(go).join(", ") || esc(r.paper_text || "")}${r.implementers.length ? `<div style="color:var(--ink-3)">→ ${r.implementers.map((x) => go(x) + (x.fidelity ? ` <span>(${esc(x.fidelity)})</span>` : "")).join(", ")}</div>` : ""}${r.deviations.length ? `<div>≠ ${r.deviations.map(go).join(", ")}</div>` : ""}</td><td class="st">${esc(r.symbol)} ${esc(r.status)}</td></tr>`).join("")
+      + (pm.unmapped || []).map((u) => `<tr class="unmapped"><td class="ref">${esc(u.pretty)}</td><td>${esc(u.text || "")} <i>(not mapped yet)</i></td><td class="st">?</td></tr>`).join("") + "</tbody></table>");
+    const devs = [], seen = new Set();
+    pm.rows.forEach((r) => r.deviations.forEach((d) => { if (!seen.has(d.id)) { seen.add(d.id); devs.push(d); } }));
+    pm.extras.forEach((d) => { if (!seen.has(d.id)) { seen.add(d.id); devs.push(d); } });
+    if (devs.length) h.push(`<div class="sec"><h3>Deviations (${devs.length})</h3>${devs.map((d) => `<div class="pdev">${go(d)} <span class="t">· ${esc(String(d.type).replace(/_/g, " "))}</span>${d.paper ? `<div><span class="t">paper</span> ${inline(d.paper)}</div>` : ""}${d.code ? `<div><span class="t">code</span> ${inline(d.code)}</div>` : ""}${d.impact ? `<div><span class="t">impact</span> ${inline(d.impact)}</div>` : ""}</div>`).join("")}</div>`);
+    $("#pane-paper").innerHTML = h.join("");
+  }
   function renderAbout() {
     const s = meta.stats || {}, h = [];
     h.push(`<h2>${esc(meta.title || root.label)}</h2>`);
     if (root.summary) h.push(`<p class="summary">${inline(root.summary)}</p>`);
     h.push(`<p class="meta-p">${all.length} nodes · ${links.length} cross-links${meta.git_commit ? ` · commit <code>${esc(meta.git_commit)}</code>` : ""}${meta.generated_at ? ` · built ${esc(String(meta.generated_at).slice(0, 10))}` : ""}</p>`);
+    const ev = meta.evidence;
+    if (ev && ev.nodes_with_evidence) {
+      const fl = all.filter((n) => n._flag).sort((a, b) => b._flag - a._flag);
+      h.push(`<div class="sec"><h3>Evidence</h3><p class="meta-p">${ev.nodes_with_evidence} nodes backed by quotes from their sources · ${ev.ok} ok · ${ev.changed} changed · ${ev.stale} stale <span style="color:var(--ink-3)">(checked ${esc(String(ev.checked_at || "").slice(0, 10))})</span></p>`
+        + (fl.length ? `<div class="evlist">${fl.map((n) => `<button data-go="${esc(n.id)}"><svg width="10" height="10" style="vertical-align:0"><circle class="flag f${n._flag}" cx="5" cy="5" r="4"/></svg> ${esc(n.label)} <span style="color:var(--ink-3)">· ${esc(n.evidence_status)}</span></button>`).join("")}</div>` : "")
+        + `</div>`);
+    }
     if (meta.scope) h.push(`<div class="sec"><h3>Scope</h3><p class="meta-p">${inline(meta.scope)}</p></div>`);
     if ((meta.sources_read || []).length) h.push(`<div class="sec"><h3>Read to build this map (${meta.sources_read.length})</h3>${meta.sources_read.map((p) => { const m = String(p).trim().match(/^(.*?)\s*(?:\(([^()]*)\)|(§.*))?$/); return srcHtml(m ? { path: m[1], section: m[2] || m[3] } : { path: String(p) }); }).join("")}</div>`);
     h.push(`<div class="sec"><h3>Keys</h3><p class="meta-p"><code>/</code> search · <code>←</code> <code>→</code> learning path · <code>F</code> fit · <code>Esc</code> close</p></div>`);
@@ -655,9 +778,12 @@ dl.gloss a { color: var(--accent); cursor: pointer; font-size: 12px; }
   const kinds = [...new Set(all.filter((n) => n._depth > 0).map((n) => n.kind))].filter((k) => ICON[k]);
   $("#legend").innerHTML = kinds.map((k) => `<span><b>${ICON[k]}</b>${esc(KIND_NAME[k])}</span>`).join("") + (links.length ? '<span><i class="dash"></i>cross-link</span>' : "");
   if (!glossary.length) $("#tabGloss").style.display = "none";
-  renderPath(); renderGloss(); renderAbout();
+  if (DATA.paper_map) $("#tabPaper").style.display = "";
+  if (DIFF) $("#tabChanges").style.display = "";
+  renderPath(); renderGloss(); renderChanges(); renderPaper(); renderAbout();
   // start with About open on wide screens, closed on small ones
-  if (innerWidth > 760) { openPanel("about"); } else { panel.classList.add("hidden"); }
+  if (innerWidth > 760) { openPanel(DIFF ? "changes" : "about"); } else { panel.classList.add("hidden"); }
+  if (DIFF) $("#sub").textContent = `Changes: ${DIFF.old.label} → ${DIFF.new.label}`;
   layout(); sync(); commit(); fit(false); kick();
   new ResizeObserver(() => kick()).observe(svg);
 })();

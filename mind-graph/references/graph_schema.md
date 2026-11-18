@@ -4,7 +4,8 @@
 1. Format (with a full minimal example)
 2. Field reference
 3. What makes a good mind graph
-4. Patterns by project type
+4. Patterns by project type (+ coverage for document collections)
+5. Paper ↔ code (research repos)
 
 ## 1. Format
 
@@ -93,10 +94,45 @@
 - `tags` – optional short strings (searchable).
 - `children` – sub-nodes.
 - `collapsed` – optional bool to force the initial state in the viewer.
+- `evidence` – optional list of `{"path": "...", "quote": "..."}`: short excerpts copied
+  verbatim from the source that prove the summary (see below). The build adds `ctx`, `sig`,
+  `verified`, `at` and `status` to each item and `evidence_status` to the node. Don't write these
+  fields yourself, and keep them when you edit graph.json.
+
+**Evidence (node-level verification).** A quote should be 20–200 characters, distinctive (unique
+in its file) and directly support the claim, for example:
+
+```json
+"evidence": [
+  {"path": "src/policy/act.py", "quote": "class ACTPolicy(nn.Module):"},
+  {"path": "papers/act.pdf", "quote": "predicts a chunk of k future actions"}
+]
+```
+
+Good quotes: a class or function signature, a config key with its value, a constant, a defining
+sentence in a document, a slide bullet, a header row. Avoid boilerplate that occurs many times
+(`return None`, `import torch`). Whitespace, line breaks, curly quotes and dashes are ignored
+when matching. For PDFs a letters-and-digits fallback also handles hyphenation. Any format
+`extract_text.py` reads can be quoted from.
+
+What the build does with it:
+- new or edited evidence (the node's summary, details or quote changed) must be found in the
+  file, otherwise the build stops with an error. It then stores a hash of the text around the
+  quote as the baseline.
+- existing evidence is compared with that baseline. **ok** means the quote is found and the
+  nearby text is unchanged; it may have moved. **changed** means the quote is found but nearby
+  text was edited. **stale** means the quote or the file is gone.
+- `build --accept id1,id2` (or `all`) re-baselines nodes you re-read and found still correct. A
+  plain rebuild never clears a flag.
+- the node status is the worst of its quotes. Flags show in the viewer (red = stale,
+  amber = changed, a ring on collapsed branches that hide flags), in MINDGRAPH.md ("Needs
+  re-check" and ⚠ in the map), and in `scan_project.py --since-graph`.
 
 **links** – cross-links outside the tree. `from`, `to` (node ids), `type`, optional `label` (≤ 3 words).
 Types: `depends_on` · `calls` · `data_flow` · `explains` (doc → code/concept) · `implements`
 (code → concept/paper) · `configures` · `contrasts` · `related`.
+`implements` links may carry `fidelity`: `exact` · `approx` · `partial` · `deviates`
+(see Paper ↔ code below).
 
 **learning_path** – ordered `{node, note}`; `note` is one line explaining why this stop comes now.
 
@@ -151,8 +187,10 @@ Pick the closest pattern, then adapt; real collections are often a mix.
 - **Papers (one or several)**: problem & motivation · method (components) · experiments ·
   results & limitations · related work. Across several papers, pillars can be themes, with
   `contrasts` links between approaches.
-- **Mixed code + paper**: two subtrees (theory / implementation) joined by many `implements`
-  links — those links are the most valuable part of the graph.
+- **Mixed code + paper (research repo)**: pillars = paper method (theory) · implementation ·
+  paper vs code (deviations) · experiments & configs. The theory and implementation sides are
+  joined by many `implements` links. Those links, and the deviations, are the most valuable part
+  of the graph. Follow the conventions in "Paper ↔ code" below.
 - **Data collection (CSV/XLSX/notebooks)**: pillars = datasets (what each describes, key
   columns) · how they are produced · analyses/notebooks · findings; `data_flow` links from
   datasets to the analyses that use them.
@@ -164,3 +202,68 @@ reachable from some node's `sources` — a single leaf per minor document is fin
 source (`"notes/"`) covers everything inside it. Documents you deliberately skip (duplicates,
 drafts, boilerplate) go in `meta.scope` by name or folder. `build_mindgraph.py` reads
 `.mindgraph/scan.json` and warns about documents that are neither.
+
+## 5. Paper ↔ code
+
+For repos that implement a paper. Run `scripts/paper_code.py` first. It writes
+`.mindgraph/paper_map.json`, which the build uses for coverage.
+
+**Paper side.** Paper-side nodes carry `paper_ref` (a string or a list), which says which part of
+the paper the node stands for. Accepted forms:
+
+| Form | Example | Normalized id |
+|---|---|---|
+| Equation | `"Eq. 7"`, `"Equation (7)"` | `eq:7` |
+| Algorithm, or one of its lines | `"Alg. 1"`, `"Algorithm 1 line 4"`, `"Alg. 1 L4"` | `alg:1`, `alg:1.4` |
+| Section / appendix | `"§3.2"`, `"Section 3.2"`, `"App. B.1"` | `sec:3.2`, `app:b.1` |
+| Table / figure | `"Table 2"`, `"Fig. 3"` | `tab:2`, `fig:3` |
+| Hyperparameter | `"hp:clip"`, `"hp:learning_rate"` | `hp:clip` (keys come from paper_code.py) |
+
+With several papers, add `"paper": "papers/x.pdf"` to the node. Cite the location in `sources`
+(`{"path": "paper/x.pdf", "page": 4}`). An `evidence` quote from the paper is a good way to pin
+what the paper actually says.
+
+**Code side.** Code nodes link to paper nodes:
+
+```json
+{"from": "code.loss", "to": "paper.clip_objective", "type": "implements", "fidelity": "approx"}
+```
+
+`fidelity` is one of:
+- `exact`: the same math
+- `approx`: equivalent up to constants, numerics or vectorization
+- `partial`: some terms or steps are missing
+- `deviates`: different behaviour
+
+Leave `fidelity` out only if you didn't check.
+
+**Deviations.** Every difference between paper and code is a `question` node with a
+`deviation` object:
+
+```json
+{"id": "dev.clip", "label": "Clip ε 0.1 not 0.2", "kind": "question", "paper_ref": "hp:clip",
+ "deviation": {"type": "hyperparameter", "paper": "ε = 0.2 (Table 1)",
+               "code": "clip_range: 0.1 in configs/default.yaml",
+               "impact": "Smaller trust region; likely slower learning (not verified)."},
+ "summary": "Default clip range is half the paper's value.",
+ "sources": [{"path": "configs/default.yaml", "lines": "1"}],
+ "evidence": [{"path": "configs/default.yaml", "quote": "clip_range: 0.1"}]}
+```
+
+`deviation.type` is one of `coefficient` · `hyperparameter` · `missing_step` · `extra_step` ·
+`different_formula` · `implementation_trick` (only in the code) · `other`. Attach each
+deviation to what it differs from, either with `paper_ref` or with a `contrasts` link to the
+paper node, and link it to the code node too. A code-only trick links only to its code node.
+Group deviations under one pillar ("Paper vs code") so they are easy to scan.
+
+**What the build produces.** A row per paper item:
+- ✓ exact
+- ≈ approx/mapped
+- ◐ partial
+- ⚠ deviates (any deviation, or `fidelity: deviates`)
+- ∅ not in code (no `implements` link)
+
+The rows appear as a table in MINDGRAPH.md and in the viewer's **Paper ↔ Code** tab, together
+with all deviations. With paper_map.json present, the build also warns about equations and
+algorithms that no node maps, and about `≠` hyperparameters that have no deviation node.
+Neither warning blocks the build.

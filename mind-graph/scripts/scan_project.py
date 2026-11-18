@@ -472,6 +472,21 @@ def scan(root: Path, select=None, excludes=None):
     }
 
 
+def evidence_check(graph_path: Path):
+    """Read-only node-level check of the existing graph's evidence quotes."""
+    try:
+        import evidence
+        g = json.loads(graph_path.read_text(encoding="utf-8"))
+        root_dir = (graph_path.parent / (g.get("meta") or {}).get("root_path", "..")).resolve()
+        rep = evidence.verify_graph(g, root_dir, mutate=False)
+    except Exception as e:  # never let the check break the scan
+        return {"lines": [f"(evidence check failed: {type(e).__name__}: {e})"], "flagged": []}
+    if not rep["with_evidence"]:
+        return {"lines": ["No node has evidence quotes yet; only file-level changes are known."], "flagged": []}
+    fl = evidence.flagged(rep)
+    return {"lines": evidence.report_lines(rep, 30), "flagged": [nid for nid, _ in fl]}
+
+
 def changed_since_graph(root: Path, graph_path: Path, select=None, excludes=None):
     try:
         g = json.loads(graph_path.read_text(encoding="utf-8"))
@@ -648,6 +663,12 @@ def render_summary(s, max_lines=240, changes=None):
         "code": "Mode: CODE — follow entry points and hub files.",
     }[mode]
     L.append(hint)
+    papers = [d for d in s["docs"] if files[d].get("format") in ("pdf", "tex")
+              and (files[d].get("pages", 0) >= 4 or files[d].get("format") == "tex"
+                   or re.search(r"(^|/)(papers?|arxiv|references?)/", d, re.I))]
+    if papers and any(r.get("symbols") for r in files.values()):
+        L.append(f"Paper + code detected ({', '.join(papers[:3])}{' …' if len(papers) > 3 else ''}): if this repo implements "
+                 "the paper, run paper_code.py <paper> --code <root> for the paper ↔ code map.")
     if s["languages"]:
         L.append("Languages: " + ", ".join(f"{k} {v}" for k, v in s["languages"][:8]))
     fmt = Counter(files[d].get("format", "?") for d in s["docs"] + s["data_files"])
@@ -671,6 +692,13 @@ def render_summary(s, max_lines=240, changes=None):
             ch = changes.get("changed") or []
             L.append(f"\n## Changed since graph ({changes.get('graph_commit') or changes.get('generated_at')}): {len(ch)} files")
             L += [f"- {c}" for c in ch[:40]] + ([f"- … {len(ch) - 40} more"] if len(ch) > 40 else [])
+            ev = changes.get("evidence")
+            if ev:
+                L.append("\n## Evidence check (which nodes of the map still hold)")
+                L += ev["lines"]
+                if ev["flagged"]:
+                    L.append("Re-read the sources of the ⚠ nodes, fix their summary/quote in graph.json, rebuild. "
+                             "Nodes marked ok can be trusted without re-reading.")
 
     L.append("\n## Tree")
     L += dir_tree(list(files), 30 if mode == "documents" else 45)
@@ -796,6 +824,8 @@ def main():
         gp = root / ".mindgraph" / "graph.json"
         changes = (changed_since_graph(root, gp, select, a.exclude) if gp.exists()
                    else {"changed": [], "graph_commit": "no graph yet"})
+        if gp.exists():
+            changes["evidence"] = evidence_check(gp)
         s["changes"] = changes
     if a.out:
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
